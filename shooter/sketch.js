@@ -5,20 +5,27 @@ const DOWN = 2
 const LEFT = 3
 
 const Config = {
+	DUMMIES_AMOUNT: 5,
 	Player: {
 		width: 32,
 		speed: 4,
 		sprint: 2
 	},
 	Gun: {
-		fireRate: 50,
-		range: 2000
+		fireRate: 100,
+		range: 1000
 	},
 	Bullet: {
 		color: 'rgba(0, 0, 200, 0.5)',
-		height: 60,
-		width: 10,
-		speed: 6,
+		height: 8,
+		width: 2,
+		speed: 16,
+		damage: 20
+	},
+	Dummy: {
+		width: 48,
+		health: 100,
+		color: 0
 	}
 }
 
@@ -31,20 +38,14 @@ const User = {
 let avatar;
 let game;
 
-const gameInit = () => {
-	let player = new Player(width / 2, height / 2, User)
-	game = new Game()
-	game.players.push(player)
-}
-
 function preload() {
   avatar = loadImage(User.avatar);
 }
 
 function setup() {
 	createCanvas(800, 800);
-	gameInit()
 	frameRate(60)
+	game = new Game()
 }
 
 function draw() {
@@ -64,7 +65,20 @@ function draw() {
 		}
 		player.display()
 	}
-
+	// handle dummies
+	if (game.dummies.length > 0) {
+		for (let i = 0; i < game.dummies.length; i++) {
+			let dummy = game.dummies[i]
+			dummy.display()
+		}
+	} else {
+		for (let i = 0; i < randomInteger(5, 20); i++) {
+			let dummy = new Dummy(randomInteger(0, width), randomInteger(0, height))
+			game.dummies.push(dummy)
+		}
+	}
+	textSize(32);
+	text(game.players[0].kills, 10, 30);
 	game.checkForCollisions()
 }
 
@@ -72,11 +86,40 @@ class Game {
 	constructor() {
 		this.players = []
 		this.bullets = []
+		this.dummies = []
+
+		this.loadPlayers()
+		this.loadDummies()
+	}
+
+	loadPlayers() {
+		let player = new Player(width / 2, height / 2, User)
+		this.players.push(player)
+	}
+
+	loadDummies() {
+		for (let i = 0; i < Config.DUMMIES_AMOUNT; i++) {
+			let dummy = new Dummy(randomInteger(0, width), randomInteger(0, height))
+			this.dummies.push(dummy)
+		}
 	}
 
 	checkForCollisions() {
 		this.validateBulletBoundries()
 		this.validatePlayersBoundries()
+		this.validateBullets()
+	}
+
+	validateBullets() {
+		for (let i = 0; i < this.bullets.length; i++) {
+			let bullet = this.bullets[i]
+			for (let j = 0; j < this.dummies.length; j++) {
+				let dummy = this.dummies[j]
+				if (validCollision(bullet, dummy)) {
+					dummy.gotHit(bullet)
+				}
+			}
+		}
 	}
 
 	validatePlayersBoundries() {
@@ -133,6 +176,7 @@ class Player {
 		this.user = user
 		this.weapon = 0
 		this.weapons = [new Gun(this)]
+		this.kills = 0
 		this.avatar = () => image(avatar, this.x, this.y, this.width, this.width);
 	}
 
@@ -186,15 +230,15 @@ class Player {
 }
 
 class Gun {
-	constructor(user) {
-		this.user = user
+	constructor(player) {
+		this.player = player
 		this.canShoot = true
 		this.fireRate = Config.Gun.fireRate // can shoot every 400ms
 	}
 
 	shoot(direction) {
 		if (this.canShoot) {
-			let bullet = new Bullet(direction, this.user)
+			let bullet = new Bullet(direction, this.player)
 			game.bullets.push(bullet)
 			this.canShoot = false
 			setTimeout(() => {
@@ -205,15 +249,16 @@ class Gun {
 }
 
 class Bullet {
-	constructor(direction, user) {
-		this.x = user.x + user.width / 2
-		this.y = user.y + user.width / 2
+	constructor(direction, player) {
+		this.x = player.x + player.width / 2
+		this.y = player.y + player.width / 2
 		this.direction = direction
+		this.damage = Config.Bullet.damage
 		this.width = Config.Bullet.width
 		this.height = Config.Bullet.height
 		this.speed = Config.Bullet.speed
 		this.distance = 0
-		this.user = user
+		this.player = player
 		this.color = Config.Bullet.color
 	}
 
@@ -247,4 +292,47 @@ class Bullet {
 			rect(this.x, this.y, this.height, this.width)
 		}
 	}
+}
+
+class Dummy {
+	constructor(x, y) {
+		this.x = x
+		this.y = y
+		this.width = Config.Dummy.width
+		this.height = this.width
+		this.health = Config.Dummy.health
+		this.color = Config.Dummy.color
+	}
+
+	gotHit(bullet) {
+		this.health -= bullet.damage
+		this.color += bullet.damage
+		bullet.remove()
+		if (this.health <= 0) {
+			bullet.player.kills += 1
+			this.remove()
+		}
+	}
+
+	remove() {
+		game.dummies = game.dummies.filter(dummy => dummy !== this)
+	}
+
+	display() {
+		fill(this.color)
+		rectMode(CENTER)
+		square(this.x, this.y, this.width)
+	}
+}
+
+const validCollision = (first, second) => {
+	if (abs(first.x - second.x) <= second.width / 2 && abs(first.y - second.y) <= second.height / 2) {
+		return true
+	}
+	return false
+}
+
+// Helper functions
+function randomInteger(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
